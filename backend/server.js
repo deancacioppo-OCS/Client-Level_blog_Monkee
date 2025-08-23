@@ -1,8 +1,9 @@
-
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const winston = require('winston');
+const fetch = require('node-fetch');
+const fs = require('fs');
 
 // Configure Winston logger
 const logger = winston.createLogger({
@@ -101,6 +102,27 @@ app.post('/api/clients/:clientId/sitemap-urls', (req, res, next) => {
     logger.info(`Successfully added sitemap URL "${url}" for client ${clientId} with ID: ${this.lastID}`);
     res.status(201).json({ id: this.lastID });
   });
+});
+
+// Sitemap Proxy Endpoint
+app.get('/api/sitemap-proxy', async (req, res) => {
+  const { url } = req.query;
+  if (!url) {
+    return res.status(400).json({ error: 'Sitemap URL is required.' });
+  }
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch sitemap from ${url}: ${response.statusText}`);
+    }
+    const sitemapContent = await response.text();
+    res.set('Content-Type', 'application/xml');
+    res.send(sitemapContent);
+  } catch (error) {
+    logger.error(`Error proxying sitemap from ${url}: ${error.message}`);
+    res.status(500).json({ error: 'Failed to fetch sitemap.', details: error.message });
+  }
 });
 
 // Centralized error handling middleware

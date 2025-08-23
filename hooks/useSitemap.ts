@@ -25,10 +25,7 @@ const useSitemap = (sitemapUrl: string | undefined): SitemapResult => {
       setUrls([]);
 
       try {
-        // Construct the proxied URL
-        const url = new URL(sitemapUrl);
-        const proxiedSitemapUrl = `/sitemap-proxy${url.pathname}${url.search}`;
-        const response = await fetch(proxiedSitemapUrl);
+        const response = await fetch(`/api/sitemap-proxy?url=${encodeURIComponent(sitemapUrl.trim())}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

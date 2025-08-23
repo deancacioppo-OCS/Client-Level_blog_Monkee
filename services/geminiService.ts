@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Client, BlogPost } from "../types";
 
@@ -100,7 +99,7 @@ async function generateFullContent(title: string, outline: string, client: Clien
         - Ensure the tone is confident and expert. Avoid apologetic language or AI self-references.
         - The content must be original and engaging.
         - **IMPORTANT:** Include external HTML hyperlinks to relevant, high-authority referencing material where appropriate.
-        - **IMPORTANT:** Include at least two internal HTML hyperlinks to relevant pages/blogs on the client's website. Select these links from the following list of URLs:
+        - **CRITICAL:** Include between 4 and 8 internal HTML hyperlinks to relevant pages/blogs on the client's website. These links MUST be contextually relevant and naturally integrated into the content. Select these links from the following list of URLs:
           ${client.sitemapUrls && client.sitemapUrls.length > 0 ? client.sitemapUrls.join('\n') : 'No sitemap URLs available.'}
     `;
     const response = await ai.models.generateContent({
