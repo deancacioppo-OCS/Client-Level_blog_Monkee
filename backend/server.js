@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const cors = require('cors');
 const winston = require('winston');
 const fetch = require('node-fetch');
@@ -20,88 +20,100 @@ const logger = winston.createLogger({
 });
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
 
-const db = new sqlite3.Database('./database.db', (err) => {
-  if (err) {
-    logger.error(`Database connection error: ${err.message}`);
+// Create a new PostgreSQL connection pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
   }
-  logger.info('Connected to the SQLite database.');
 });
 
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS used_topics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      client_id TEXT NOT NULL,
-      topic TEXT NOT NULL
-    )
-  `);
+// Function to create tables if they don't exist
+const createTables = async () => {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS used_topics (
+        id SERIAL PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        topic TEXT NOT NULL
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sitemap_urls (
+        id SERIAL PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        url TEXT NOT NULL
+      )
+    `);
+    logger.info('Tables created or already exist.');
+  } catch (err) {
+    logger.error('Error creating tables:', err);
+  } finally {
+    client.release();
+  }
+};
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS sitemap_urls (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      client_id TEXT NOT NULL,
-      url TEXT NOT NULL
-    )
-  `);
-});
+// Call the function to create tables when the server starts
+createTables();
 
-app.get('/api/clients/:clientId/used-topics', (req, res, next) => {
+app.get('/api/clients/:clientId/used-topics', async (req, res, next) => {
   const { clientId } = req.params;
   logger.info(`Fetching used topics for client: ${clientId}`);
-  db.all('SELECT topic FROM used_topics WHERE client_id = ?', [clientId], (err, rows) => {
-    if (err) {
-      logger.error(`Error fetching used topics for client ${clientId}: ${err.message}`);
-      return next(err);
-    }
+  try {
+    const { rows } = await pool.query('SELECT topic FROM used_topics WHERE client_id = $1', [clientId]);
     logger.info(`Successfully fetched ${rows.length} used topics for client: ${clientId}`);
     res.json(rows.map(row => row.topic));
-  });
+  } catch (err) {
+    logger.error(`Error fetching used topics for client ${clientId}: ${err.message}`);
+    next(err);
+  }
 });
 
-app.post('/api/clients/:clientId/used-topics', (req, res, next) => {
+app.post('/api/clients/:clientId/used-topics', async (req, res, next) => {
   const { clientId } = req.params;
   const { topic } = req.body;
   logger.info(`Attempting to add used topic "${topic}" for client: ${clientId}`);
-  db.run('INSERT INTO used_topics (client_id, topic) VALUES (?, ?)', [clientId, topic], function (err) {
-    if (err) {
-      logger.error(`Error adding used topic "${topic}" for client ${clientId}: ${err.message}`);
-      return next(err);
-    }
-    logger.info(`Successfully added used topic "${topic}" for client ${clientId} with ID: ${this.lastID}`);
-    res.status(201).json({ id: this.lastID });
-  });
+  try {
+    const { rows } = await pool.query('INSERT INTO used_topics (client_id, topic) VALUES ($1, $2) RETURNING id', [clientId, topic]);
+    logger.info(`Successfully added used topic "${topic}" for client ${clientId} with ID: ${rows[0].id}`);
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    logger.error(`Error adding used topic "${topic}" for client ${clientId}: ${err.message}`);
+    next(err);
+  }
 });
 
-app.get('/api/clients/:clientId/sitemap-urls', (req, res, next) => {
+app.get('/api/clients/:clientId/sitemap-urls', async (req, res, next) => {
   const { clientId } = req.params;
   logger.info(`Fetching sitemap URLs for client: ${clientId}`);
-  db.all('SELECT url FROM sitemap_urls WHERE client_id = ?', [clientId], (err, rows) => {
-    if (err) {
-      logger.error(`Error fetching sitemap URLs for client ${clientId}: ${err.message}`);
-      return next(err);
-    }
+  try {
+    const { rows } = await pool.query('SELECT url FROM sitemap_urls WHERE client_id = $1', [clientId]);
     logger.info(`Successfully fetched ${rows.length} sitemap URLs for client: ${clientId}`);
     res.json(rows.map(row => row.url));
-  });
+  } catch (err) {
+    logger.error(`Error fetching sitemap URLs for client ${clientId}: ${err.message}`);
+    next(err);
+  }
 });
 
-app.post('/api/clients/:clientId/sitemap-urls', (req, res, next) => {
+app.post('/api/clients/:clientId/sitemap-urls', async (req, res, next) => {
   const { clientId } = req.params;
   const { url } = req.body;
   logger.info(`Attempting to add sitemap URL "${url}" for client: ${clientId}`);
-  db.run('INSERT INTO sitemap_urls (client_id, url) VALUES (?, ?)', [clientId, url], function (err) {
-    if (err) {
-      logger.error(`Error adding sitemap URL "${url}" for client ${clientId}: ${err.message}`);
-      return next(err);
-    }
-    logger.info(`Successfully added sitemap URL "${url}" for client ${clientId} with ID: ${this.lastID}`);
-    res.status(201).json({ id: this.lastID });
-  });
+  try {
+    const { rows } = await pool.query('INSERT INTO sitemap_urls (client_id, url) VALUES ($1, $2) RETURNING id', [clientId, url]);
+    logger.info(`Successfully added sitemap URL "${url}" for client ${clientId} with ID: ${rows[0].id}`);
+    res.status(201).json({ id: rows[0].id });
+  } catch (err) {
+    logger.error(`Error adding sitemap URL "${url}" for client ${clientId}: ${err.message}`);
+    next(err);
+  }
 });
 
 // Sitemap Proxy Endpoint
