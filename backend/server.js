@@ -3,7 +3,9 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const winston = require('winston');
 const fetch = require('node-fetch');
+const cheerio = require('cheerio');
 const fs = require('fs');
+const { GoogleGenerativeAI } = require('@google/generative-ai'); // New import
 
 // Configure Winston logger
 const logger = winston.createLogger({
@@ -134,6 +136,82 @@ app.get('/api/sitemap-proxy', async (req, res) => {
   } catch (error) {
     logger.error(`Error proxying sitemap from ${url}: ${error.message}`);
     res.status(500).json({ error: 'Failed to fetch sitemap.', details: error.message });
+  }
+});
+
+app.get('/api/crawl', async (req, res) => {
+  const { url } = req.query;
+  if (!url) {
+    return res.status(400).json({ error: 'URL is required.' });
+  }
+
+  try {
+    const crawledUrls = new Set();
+    const queue = [url];
+    const baseUrl = new URL(url).origin;
+
+    while (queue.length > 0) {
+      const currentUrl = queue.shift();
+      if (crawledUrls.has(currentUrl)) {
+        continue;
+      }
+
+      try {
+        const response = await fetch(currentUrl);
+        if (!response.ok) {
+          continue;
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('text/html')) {
+          continue;
+        }
+
+        crawledUrls.add(currentUrl);
+
+        const html = await response.text();
+        const $ = cheerio.load(html);
+
+        $('a').each((i, link) => {
+          const href = $(link).attr('href');
+          if (href) {
+            const absoluteUrl = new URL(href, baseUrl).href;
+            if (absoluteUrl.startsWith(baseUrl) && !crawledUrls.has(absoluteUrl)) {
+              queue.push(absoluteUrl);
+            }
+          }
+        });
+      } catch (error) {
+        logger.error(`Error crawling ${currentUrl}: ${error.message}`);
+      }
+    }
+
+    res.json(Array.from(crawledUrls));
+  } catch (error) {
+    logger.error(`Error crawling website from ${url}: ${error.message}`);
+    res.status(500).json({ error: 'Failed to crawl website.', details: error.message });
+  }
+});
+
+// New Gemini Proxy Endpoint
+app.post('/api/gemini-proxy', async (req, res) => {
+  const GEMINI_API_KEY_BACKEND = process.env.GEMINI_API_KEY_BACKEND;
+  if (!GEMINI_API_KEY_BACKEND) {
+    logger.error('GEMINI_API_KEY_BACKEND environment variable not set on backend.');
+    return res.status(500).json({ error: 'Server-side Gemini API key not configured.' });
+  }
+
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY_BACKEND);
+  const { model, contents, config } = req.body;
+
+  try {
+    const aiModel = genAI.getGenerativeModel({ model: model });
+    const result = await aiModel.generateContent({ contents, ...config });
+    const response = await result.response;
+    res.json(response);
+  } catch (error) {
+    logger.error(`Error calling Gemini API via proxy: ${error.message}`, { stack: error.stack });
+    res.status(500).json({ error: 'Failed to call Gemini API.', details: error.message });
   }
 });
 
