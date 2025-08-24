@@ -25,9 +25,6 @@ const port = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Log the database URL to verify it's being read
-console.log('DATABASE_URL:', process.env.DATABASE_URL);
-
 // Create a new PostgreSQL connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
