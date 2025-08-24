@@ -13,10 +13,14 @@ const textModel = "gemini-2.5-flash";
 const imageModel = "imagen-3.0-generate-002";
 
 async function findTrendingTopic(client: Client): Promise<string> {
+    async function findTrendingTopic(client: Client): Promise<string> {
     const prompt = `
       // Client ID: ${client.id}
       Using Google Search, find one current and highly relevant trending topic, news story, or popular question related to the '${client.industry}' industry. Provide only the topic name or headline.
     `;
+    const response = await callGeminiProxy(textModel, prompt, { tools: [{googleSearch: {}}] });
+    return response.text.trim();
+}
     const response = await ai.models.generateContent({
         model: textModel,
         contents: prompt,

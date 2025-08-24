@@ -16,6 +16,7 @@
     "pg": "^8.11.3",
     "winston": "^3.8.2",
     "node-fetch": "^3.3.2",
-    "cheerio": "^1.0.0-rc.12"
+    "cheerio": "^1.0.0-rc.12",
+    "@google/generative-ai": "^0.11.0"
   }
 }
