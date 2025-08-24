@@ -1,16 +1,14 @@
-
 import React, { useState, useEffect } from 'react';
 import { Client } from '../types';
 import { Modal } from './ui/Modal';
 import { Input } from './ui/Input';
 import { Textarea } from './ui/Textarea';
 import { Button } from './ui/Button';
-import useSitemap from '../hooks/useSitemap';
 
 interface ClientFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (client: Client, sitemapUrls: string[], sitemapLoading: boolean, sitemapError: string | null) => void; // Modified
+  onSave: (client: Client, sitemapUrls: string[]) => void;
   existingClient: Client | null;
 }
 
@@ -19,30 +17,52 @@ const ClientForm: React.FC<ClientFormProps> = ({ isOpen, onClose, onSave, existi
     name: '',
     industry: '',
     websiteUrl: '',
-    sitemapUrl: '', // Added
     uniqueValueProp: '',
     brandVoice: '',
     contentStrategy: '',
     wp: { url: '', username: '', appPassword: '' },
   });
+  const [sitemapUrls, setSitemapUrls] = useState<string[]>([]);
+  const [isCrawling, setIsCrawling] = useState(false);
 
   useEffect(() => {
     if (existingClient) {
       setFormData({
         ...existingClient,
-        sitemapUrl: existingClient.sitemapUrl || '', // Added
         contentStrategy: existingClient.contentStrategy || '',
         wp: { ...existingClient.wp, appPassword: '' }
       });
+      setSitemapUrls(existingClient.sitemapUrls || []);
     } else {
       setFormData({
-        name: '', industry: '', websiteUrl: '', sitemapUrl: '', uniqueValueProp: '', brandVoice: '', contentStrategy: '', // Added sitemapUrl
+        name: '', industry: '', websiteUrl: '', uniqueValueProp: '', brandVoice: '', contentStrategy: '',
         wp: { url: '', username: '', appPassword: '' },
       });
+      setSitemapUrls([]);
     }
   }, [existingClient, isOpen]);
 
-  const { urls: sitemapUrls, loading: sitemapLoading, error: sitemapError } = useSitemap(formData.sitemapUrl); // Added
+  const handleCrawl = async () => {
+    if (!formData.websiteUrl) {
+      alert('Please enter a website URL to crawl.');
+      return;
+    }
+    setIsCrawling(true);
+    try {
+      const response = await fetch(`/api/crawl?url=${encodeURIComponent(formData.websiteUrl)}`);
+      if (!response.ok) {
+        throw new Error('Failed to crawl website.');
+      }
+      const urls = await response.json();
+      setSitemapUrls(urls);
+      alert(`Successfully crawled ${urls.length} URLs.`);
+    } catch (error) {
+      console.error('Crawling error:', error);
+      alert('Failed to crawl website.');
+    } finally {
+      setIsCrawling(false);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -60,15 +80,6 @@ const ClientForm: React.FC<ClientFormProps> = ({ isOpen, onClose, onSave, existi
         alert("Client Name and Industry are required.");
         return;
     }
-    // Add validation for sitemap loading/error if needed, or handle it in ClientManager
-    if (sitemapLoading) {
-      alert("Sitemap is still loading. Please wait.");
-      return;
-    }
-    if (sitemapError) {
-      alert(`Sitemap error: ${sitemapError}. Please check the URL.`);
-      return;
-    }
 
     const clientToSave: Client = {
       ...formData,
@@ -77,9 +88,9 @@ const ClientForm: React.FC<ClientFormProps> = ({ isOpen, onClose, onSave, existi
         ...formData.wp,
         appPassword: formData.wp.appPassword || existingClient?.wp.appPassword,
       },
-      sitemapUrls: sitemapUrls, // Added
+      sitemapUrls: sitemapUrls,
     };
-    onSave(clientToSave, sitemapUrls, sitemapLoading, sitemapError); // Modified
+    onSave(clientToSave, sitemapUrls);
     onClose();
   };
 
@@ -90,8 +101,12 @@ const ClientForm: React.FC<ClientFormProps> = ({ isOpen, onClose, onSave, existi
           <Input id="name" name="name" label="Client Name*" value={formData.name} onChange={handleChange} required />
           <Input id="industry" name="industry" label="Industry*" value={formData.industry} onChange={handleChange} required />
         </div>
-        <Input id="websiteUrl" name="websiteUrl" label="Website URL" value={formData.websiteUrl} onChange={handleChange} />
-        <Input id="sitemapUrl" name="sitemapUrl" label="Sitemap URL" value={formData.sitemapUrl || ''} onChange={handleChange} placeholder="https://example.com/sitemap.xml" />
+        <div className="flex items-end gap-2">
+          <Input id="websiteUrl" name="websiteUrl" label="Website URL" value={formData.websiteUrl} onChange={handleChange} className="flex-grow" />
+          <Button type="button" onClick={handleCrawl} disabled={isCrawling}>
+            {isCrawling ? 'Crawling...' : 'Crawl for Links'}
+          </Button>
+        </div>
         <Textarea id="uniqueValueProp" name="uniqueValueProp" label="Unique Value Proposition" value={formData.uniqueValueProp} onChange={handleChange} rows={3} />
         <Textarea id="brandVoice" name="brandVoice" label="Brand Voice Description" value={formData.brandVoice} onChange={handleChange} rows={3} />
         <Textarea id="contentStrategy" name="contentStrategy" label="Content Strategy" value={formData.contentStrategy} onChange={handleChange} rows={3} />

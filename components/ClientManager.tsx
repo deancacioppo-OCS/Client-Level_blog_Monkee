@@ -19,7 +19,7 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, setClients, sele
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
 
-  const handleSaveClient = (client: Client, sitemapUrls: string[], sitemapLoading: boolean, sitemapError: string | null) => {
+  const handleSaveClient = (client: Client, sitemapUrls: string[]) => {
     const clientToSave: Client = {
       ...client,
       sitemapUrls: sitemapUrls,
